@@ -2,6 +2,6 @@
     "videolyzer":{
         "profile": "pythonAutomation",
         "videos_bucket": "yangvideolyzer713",
-        "videos_table": "",
+        "videos_table": ""
     }
 }
