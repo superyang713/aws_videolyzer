@@ -5,6 +5,7 @@ import boto3
 import os
 import json
 
+
 def get_video_labels(job_id):
     rekognition_client = boto3.client('rekognition')
     response = rekognition_client.get_label_detection(JobId=job_id)
@@ -22,8 +23,32 @@ def get_video_labels(job_id):
     return response
 
 
+def make_item(data):
+    if isinstance(data, dict):
+        return {k: make_item(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [make_item(v) for v in data]
+    if isinstance(data, float):
+        return str(data)
+
+    return data
+
+
 def put_labels_in_db(data, video_name, video_bucket):
-    pass
+    del data['ResponseMetadata']
+    del data['JobStatus']
+
+    data['videoName'] = video_name
+    data['videoBucket'] = video_bucket
+
+    dynamodb = boto3.resource('dynamodb')
+    videos_table = dynamodb.Table(os.environ['DYNAMODB_TABLE_NAME'])
+
+    data = make_item(data)
+
+    videos_table.put_item(Item=data)
+
+    return
 
 
 def start_label_detection(bucket, key):
@@ -41,19 +66,17 @@ def start_label_detection(bucket, key):
         }
     )
 
-    print(response)
-
-    return
+    return response
 
 
 def start_processing_video(event, context):
     for record in event['Records']:
-        start_label_detection(
+        response = start_label_detection(
             record['s3']['bucket']['name'],
             unquote_plus(record['s3']['object']['key'])
         )
 
-    return
+    return response
 
 
 def handle_label_detection(event, context):
@@ -64,7 +87,7 @@ def handle_label_detection(event, context):
         s3_bucket = message['Video']['S3Bucket']
 
         response = get_video_labels(job_id)
-        print(response)
+
         put_labels_in_db(response, s3_object, s3_bucket)
 
     return
