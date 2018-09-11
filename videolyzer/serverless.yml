@@ -19,23 +19,35 @@ provider:
                   - - ${self:custom.videosBucketArn}
                     - '/*'
 
+        # Lambda function can pass the role to specified role.
         - Effect: "Allow"
           Action:
               - iam:GetRole
               - iam:PassRole
           Resource:
+              # GetAtt function returns the value of an attribute from a resource in the template
               Fn::GetAtt:
                   - RekognitionSNSPublishRole
                   - Arn
 
+        - Effect: "Allow"
+          Action:
+              - "dynamodb:PutItem"
+          Resource:
+              Fn::GetAtt:
+                  - VideosTable
+                  - Arn
+
     environment:
         REKOGNITION_SNS_TOPIC_ARN: ${self:custom.rekognitionSNSTopicArn}
+        DYNAMODB_TABLE_NAME: ${self:custom.videosTableName}
         REKOGNITION_ROLE_ARN:
             Fn::GetAtt:
                 - RekognitionSNSPublishRole
                 - Arn
 
 custom:
+    videosTableName: ${file(../config.${self:provider.stage}.json):videolyzer.videos_table}
     rekognitionSNSTopicArn:
         Fn::Join:
             - ':'
@@ -71,9 +83,28 @@ functions:
         events:
             - sns: handleLabelDetectionTopic
 
-# Create a role using cloudformation:
+# Create new aws resources using cloudformation.
 resources:
     Resources:
+
+        # Create a DynamoDB table.
+        VideosTable:
+            Type: AWS::DynamoDB::Table
+            Properties:
+                AttributeDefinitions:
+                    -
+                      AttributeName: videoName
+                      AttributeType: S
+                KeySchema:
+                    -
+                      AttributeName: videoName
+                      KeyType: HASH
+                ProvisionedThroughput:
+                    ReadCapacityUnits: 1
+                    WriteCapacityUnits: 1
+                TableName: ${self:custom.videosTableName}
+
+        # Create a new assumable role for Rekognition, this role is passed by Lambda function.
         RekognitionSNSPublishRole:
             Type: AWS::IAM::Role
             Properties:
